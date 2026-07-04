@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class MetaInformation():
-    templateid = None
-    templatename = None
-    description = None
-    variables = {}
+class MetaInformation:
+    templateid: str | None = None
+    templatename: str | None = None
+    description: str | None = None
+    variables: dict = {}
 
     def __init__(self, template_name: pathlib.Path):
         metafilename = template_name.stem + ".meta.json"
@@ -46,21 +46,21 @@ class MetaInformation():
             logger.warning('Could not find {}, no metainformation for {} available!'.format(metafile, template_name))
             raise TemplateNotValidError('Template ``{}`` has no metainformation sidecar-file.'.format(metafile))
 
-    def getVarInfo(self, varname: str):
+    def getVarInfo(self, varname: str) -> tuple[str, str, str, str]:
         if self.variables[varname]:
             return self.variables[varname]['readablename'], \
-                   self.variables[varname]['datatype'], \
-                   self.variables[varname]['description'], \
-                   self.variables[varname]['source']
+                self.variables[varname]['datatype'], \
+                self.variables[varname]['description'], \
+                self.variables[varname]['source']
 
-    def getInfo(self):
+    def getInfo(self) -> tuple[str | None, str | None, str | None]:
         return self.templateid, self.templatename, self.description
 
-    def getID(self):
+    def getID(self) -> str | None:
         return self.templateid
 
 
-class TemplateManager(object):
+class TemplateManager:
     __instance = None
 
     def __init__(self):
@@ -107,10 +107,10 @@ class TemplateManager(object):
             logger.debug("TemplateManager reuse.")
         return TemplateManager.__instance
 
-    def getTemplateList(self):
+    def getTemplateList(self) -> list[str]:
         return list(self.templates.keys())
 
-    def getTemplateMeta(self, template):
+    def getTemplateMeta(self, template: str) -> dict | None:
         return self.templates.get(template)
 
 

@@ -9,9 +9,11 @@ if __name__ == '__main__':
     librml = LibRML(itemid=id)
 
     # set some attributes
-    librml.tenant = 'http://slub-dresden.de'
+    librml.tenant = 'https://www.slub-dresden.de/'
     librml.sharealike = True
     librml.mention = True
+    librml.copyright = True
+    librml.commercialuse = False
 
     print('Output after creation and setting some attributes:')
     print(json.dumps(librml.to_dict(), indent=4))
@@ -24,7 +26,10 @@ if __name__ == '__main__':
             restrictions=[
                 Restriction(
                     res_type=RestrictionType.DATE,
-                    fromdate=date(year=2026, month=2, day=11))
+                    fromdate=date(year=2026, month=2, day=11)),
+                Restriction(
+                    res_type=RestrictionType.QUALITY,
+                    maxdimension=1080)
             ],
         )
     )
@@ -71,6 +76,17 @@ if __name__ == '__main__':
     # Now, let's get some infos out of this LibRML
 
     print('All actions: {}'.format(librml.allactionnames()))
-    print('Actions allowed:')
+    print('XML Output:')
+    print(librml.to_xml())
 
-    print(ActionType.fname('eat'))
+    # Test agreement restriction
+    agreement_action = Action(
+        type=ActionType.DOWNLOAD,
+        permission=True,
+        restrictions=[
+            Restriction(res_type=RestrictionType.AGREEMENT, required=True)
+        ]
+    )
+    librml.actions.append(agreement_action)
+    print('Output after adding agreement action:')
+    print(json.dumps(librml.to_dict(), indent=4))

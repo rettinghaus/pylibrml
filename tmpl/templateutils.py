@@ -7,8 +7,7 @@ from model.librml import LibRML
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
-def from_template(templateid: str, itemid: str, tenant: str = None, **kwargs):
+def from_template(templateid: str, itemid: str, tenant: str | None = None, **kwargs) -> LibRML:
     from tmpl.TemplateManager import TemplateManager
     from jinja2 import Template
 
