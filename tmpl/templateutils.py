@@ -1,47 +1,28 @@
-import json
 import logging
+import pathlib
 
-from common.errors import TemplateNotValidError
 from model.librml import LibRML
 
 logger = logging.getLogger(__name__)
 
 
-@staticmethod
-def from_template(templateid: str, itemid: str, tenant: str = None, **kwargs):
+def from_template(templateid: str, itemid: str, tenant: str | None = None, **kwargs) -> LibRML:
     from tmpl.TemplateManager import TemplateManager
     from jinja2 import Template
 
     tm = TemplateManager()
-    if template := tm.getTemplate(templateid):
-        args = {}
-        if tr := tm.getFillableRestriction(templateid):
-            for pftid, pfttype, pftdesc in tr:
-                logger.debug('Found {} as restriction, type is {}'.format(pftid, pfttype))
-                if pftid in kwargs:
-                    value = kwargs.get(pftid)
-                    logger.debug('Found value in args for {}: {}'.format(pftid, value))
-                    args[pftid] = value
-                else:
-                    logger.error('Can''t find a value for {}'.format(pftid))
-            tmpl_json = json.dumps(template)
-            tmpl = Template(tmpl_json)
-            filled = tmpl.render(args)
-            template = json.loads(filled)
+    t_meta = tm.getTemplateMeta(templateid)
+    if t_meta:
+        t_path = pathlib.Path('sample-templates') / (templateid + '.jinja')
+        with open(t_path, 'r') as f:
+            t_content = f.read()
 
-            ret = LibRML(itemid)
-            template.update(id=itemid)
-            template.update(tenant=tenant)
-
-            ret.from_dict(template)
-        else:
-            ret = LibRML(itemid)
-            template.update(id=itemid)
-            template.update(tenant=tenant)
-
-            ret.from_dict(template)
-
-        return ret
-
+        template = Template(t_content)
+        rendered = template.render(**kwargs)
+        librml = LibRML.from_jsonstr(rendered)
+        librml.id = itemid
+        if tenant:
+            librml.tenant = tenant
+        return librml
     else:
-        raise TemplateNotValidError('No template "{}" found.'.format(templateid))
+        raise ValueError(f"Template {templateid} not found")

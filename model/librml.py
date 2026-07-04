@@ -1,21 +1,20 @@
-import collections
+import collections.abc
 import json
 import logging
 import xml.etree.ElementTree as ET
 from datetime import date
 from enum import Enum, unique
-from typing import List
 
 from common.errors import LibRMLNotValidError
-from model.names import SUBNET, GROUPS, PARTS, MINAGE, INSIDE, OUTSIDE, MACHINES, FROMDATE, TODATE, DURATION, COUNT, \
-    SESSIONS, WATERMARK, COMMERCIAL, NONCOMMERCIAL, MAXRES, MAXBIT, TYPE, XRESTRICTION, XPART, XGROUP, XSUBNET, \
-    PERMISSION, RESTRICTIONS, XACTION, TENANT, MENTION, SHARE, USAGEGUIDE, ACTIONS, LIBRML, ITEM, ID, VERSION, XMACHINE, \
-    TEMPLATE, RELATEDIDS, RELATEDID, COPYRIGHT, AGREEMENTREQ
+from model.names import SUBNET, GROUPS, PARTS, MINAGE, MAXAGE, INSIDE, OUTSIDE, MACHINES, FROMDATE, TODATE, DURATION, \
+    MAXDURATION, COUNT, SESSIONS, WATERMARK, COMMERCIAL, NONCOMMERCIAL, MAXRES, MAXBIT, MAXDIMENSION, PERCENTAGE, \
+    REQUIRED, TYPE, XRESTRICTION, XPART, XGROUP, XSUBNET, PERMISSION, RESTRICTIONS, XACTION, TENANT, \
+    MENTION, SHARE, USAGEGUIDE, ACTIONS, LIBRML, ITEM, ID, VERSION, XMACHINE, TEMPLATE, COPYRIGHT
 
 logger = logging.getLogger(__name__)
 
 
-class TypedList(collections.MutableSequence):
+class TypedList(collections.abc.MutableSequence):
     def __init__(self, oktypes, *args):
         self.oktypes = oktypes
         self.list = list()
@@ -105,12 +104,15 @@ class RestrictionType(Enum):
 
 
 class Restriction:
-    def __init__(self, res_type, subnet: List[str] = None, groups: List[str] = None, parts: List[str] = None,
-                 minage: int = None, inside: str = None, outside: str = None, machines: List[str] = None,
-                 fromdate: date = None, todate: date = None, duration: int = None, count: int = None,
-                 sessions: int = None, watermarkvalue: str = None, commercialuse: bool = None,
-                 noncommercialuse: bool = None, maxresolution: int = None, maxbitrate: int = None,
-                 agreement_required: bool = False):
+    def __init__(self, res_type: RestrictionType, subnet: list[str] | None = None, groups: list[str] | None = None,
+                 parts: list[str] | None = None, minage: int | None = None, maxage: int | None = None,
+                 inside: str | None = None, outside: str | None = None, machines: list[str] | None = None,
+                 fromdate: date | None = None, todate: date | None = None, duration: int | None = None,
+                 maxduration: int | None = None, count: int | None = None, sessions: int | None = None,
+                 watermarkvalue: str | None = None, commercialuse: bool | None = None,
+                 noncommercialuse: bool | None = None, maxresolution: int | None = None,
+                 maxbitrate: int | None = None, maxdimension: int | None = None,
+                 percentage: int | None = None, required: bool | None = None):
 
         if res_type in RestrictionType:
             self.type = res_type
@@ -121,12 +123,14 @@ class Restriction:
         self.groups = groups if groups is not None else []
         self.parts = parts if parts is not None else []
         self.minage = minage
+        self.maxage = maxage
         self.inside = inside
         self.outside = outside
         self.machines = machines if machines is not None else []
         self.fromdate = fromdate
         self.todate = todate
         self.duration = duration
+        self.maxduration = maxduration
         self.count = count
         self.sessions = sessions
         self.watermarkvalue = watermarkvalue
@@ -134,18 +138,30 @@ class Restriction:
         self.noncommercialuse = noncommercialuse
         self.maxresolution = maxresolution
         self.maxbitrate = maxbitrate
-        self.agreement_required = agreement_required
+        self.maxdimension = maxdimension
+        self.percentage = percentage
+        self.required = required
 
     def to_dict(self):
         if self.type == RestrictionType.PARTS:
+            out = {TYPE: self.type.name.lower()}
             if len(self.parts) > 0:
-                return {TYPE: self.type.name.lower(), PARTS: self.parts}
+                out[PARTS] = self.parts
+            if self.percentage:
+                out[PERCENTAGE] = self.percentage
+            if len(out) > 1:
+                return out
         elif self.type == RestrictionType.GROUP:
             if len(self.groups) > 0:
                 return {TYPE: self.type.name.lower(), GROUPS: self.groups}
         elif self.type == RestrictionType.AGE:
+            out = {TYPE: self.type.name.lower()}
             if self.minage:
-                return {TYPE: self.type.name.lower(), MINAGE: self.minage}
+                out[MINAGE] = self.minage
+            if self.maxage:
+                out[MAXAGE] = self.maxage
+            if self.minage or self.maxage:
+                return out
         elif self.type == RestrictionType.LOCATION:
             out = {TYPE: self.type.name.lower()}
             if self.inside:
@@ -167,8 +183,13 @@ class Restriction:
             if self.todate or self.fromdate:
                 return out
         elif self.type == RestrictionType.DURATION:
+            out = {TYPE: self.type.name.lower()}
             if self.duration:
-                return {TYPE: self.type.name.lower(), DURATION: int(self.duration)}
+                out[DURATION] = int(self.duration)
+            if self.maxduration:
+                out[MAXDURATION] = int(self.maxduration)
+            if self.duration or self.maxduration:
+                return out
         elif self.type == RestrictionType.COUNT:
             if self.count:
                 return {TYPE: self.type.name.lower(), COUNT: int(self.count)}
@@ -180,11 +201,11 @@ class Restriction:
                 return {TYPE: self.type.name.lower(), WATERMARK: self.watermarkvalue}
         elif self.type == RestrictionType.COMMERCIALUSE:
             out = {TYPE: self.type.name.lower()}
-            if self.commercialuse:
+            if self.commercialuse is not None:
                 out[COMMERCIAL] = self.commercialuse
-            if self.noncommercialuse:
+            if self.noncommercialuse is not None:
                 out[NONCOMMERCIAL] = self.noncommercialuse
-            if self.commercialuse or self.noncommercialuse:
+            if self.commercialuse is not None or self.noncommercialuse is not None:
                 return out
         elif self.type == RestrictionType.QUALITY:
             out = {TYPE: self.type.name.lower()}
@@ -192,18 +213,20 @@ class Restriction:
                 out[MAXRES] = int(self.maxresolution)
             if self.maxbitrate:
                 out[MAXBIT] = int(self.maxbitrate)
-            if self.maxresolution or self.maxbitrate:
+            if self.maxdimension:
+                out[MAXDIMENSION] = int(self.maxdimension)
+            if self.maxresolution or self.maxbitrate or self.maxdimension:
                 return out
         elif self.type == RestrictionType.AGREEMENT:
-            out = {TYPE: self.type.name.lower()}
-            if self.agreement_required:
-                out[AGREEMENTREQ] = True
-                return out
+            if self.required is not None:
+                return {TYPE: self.type.name.lower(), REQUIRED: self.required}
 
     def to_xml(self):
         x = ET.Element(XRESTRICTION, {TYPE: self.type.name.lower()})
 
         if self.type == RestrictionType.PARTS:
+            if self.percentage:
+                x.set(PERCENTAGE, str(self.percentage))
             for part in self.parts:
                 p = ET.SubElement(x, XPART)
                 p.text = part
@@ -214,6 +237,8 @@ class Restriction:
         elif self.type == RestrictionType.AGE:
             if self.minage:
                 x.set(MINAGE, str(self.minage))
+            if self.maxage:
+                x.set(MAXAGE, str(self.maxage))
         elif self.type == RestrictionType.LOCATION:
             if self.inside:
                 x.set(INSIDE, self.inside)
@@ -233,6 +258,8 @@ class Restriction:
         elif self.type == RestrictionType.DURATION:
             if self.duration:
                 x.set(DURATION, str(self.duration))
+            if self.maxduration:
+                x.set(MAXDURATION, str(self.maxduration))
         elif self.type == RestrictionType.COUNT:
             if self.count:
                 x.set(COUNT, str(self.count))
@@ -243,18 +270,20 @@ class Restriction:
             if self.watermarkvalue:
                 x.set(WATERMARK, self.watermarkvalue)
         elif self.type == RestrictionType.COMMERCIALUSE:
-            if self.commercialuse:
+            if self.commercialuse is not None:
                 x.set(COMMERCIAL, str(self.commercialuse).lower())
-            if self.noncommercialuse:
+            if self.noncommercialuse is not None:
                 x.set(NONCOMMERCIAL, str(self.noncommercialuse).lower())
         elif self.type == RestrictionType.QUALITY:
             if self.maxbitrate:
                 x.set(MAXBIT, str(self.maxbitrate))
             if self.maxresolution:
                 x.set(MAXRES, str(self.maxresolution))
+            if self.maxdimension:
+                x.set(MAXDIMENSION, str(self.maxdimension))
         elif self.type == RestrictionType.AGREEMENT:
-            if self.agreement_required:
-                x.set(AGREEMENTREQ, str(self.agreement_required).lower())
+            if self.required is not None:
+                x.set(REQUIRED, str(self.required).lower())
         else:
             return None
 
@@ -263,10 +292,14 @@ class Restriction:
     def from_dict(self, restriction):
         if PARTS in restriction:
             self.parts = restriction[PARTS]
+        if PERCENTAGE in restriction:
+            self.percentage = int(restriction[PERCENTAGE])
         if GROUPS in restriction:
             self.groups = restriction[GROUPS]
         if MINAGE in restriction:
-            self.minage = restriction[MINAGE]
+            self.minage = int(restriction[MINAGE])
+        if MAXAGE in restriction:
+            self.maxage = int(restriction[MAXAGE])
         if INSIDE in restriction:
             self.inside = restriction[INSIDE]
         if OUTSIDE in restriction:
@@ -281,6 +314,8 @@ class Restriction:
             self.todate = date.fromisoformat(restriction[TODATE])
         if DURATION in restriction:
             self.duration = int(restriction[DURATION])
+        if MAXDURATION in restriction:
+            self.maxduration = int(restriction[MAXDURATION])
         if COUNT in restriction:
             self.count = int(restriction[COUNT])
         if SESSIONS in restriction:
@@ -292,21 +327,28 @@ class Restriction:
         if NONCOMMERCIAL in restriction:
             self.noncommercialuse = restriction[NONCOMMERCIAL]
         if MAXRES in restriction:
-            self.maxresolution = restriction[MAXRES]
+            self.maxresolution = int(restriction[MAXRES])
         if MAXBIT in restriction:
-            self.maxbitrate = restriction[MAXBIT]
-        if AGREEMENTREQ in restriction:
-            self.agreement_required = restriction[AGREEMENTREQ]
+            self.maxbitrate = int(restriction[MAXBIT])
+        if MAXDIMENSION in restriction:
+            self.maxdimension = int(restriction[MAXDIMENSION])
+        if REQUIRED in restriction:
+            self.required = restriction[REQUIRED]
 
     def from_xml(self, restriction_node):
         if self.type == RestrictionType.PARTS:
+            if restriction_node.attrib.get(PERCENTAGE):
+                self.percentage = int(restriction_node.attrib.get(PERCENTAGE))
             for part in restriction_node.iterfind(XPART):
                 self.parts.append(part.text)
         if self.type == RestrictionType.GROUP:
             for group in restriction_node.iterfind(XGROUP):
                 self.groups.append(group.text)
         if self.type == RestrictionType.AGE:
-            self.minage = restriction_node.attrib.get(MINAGE)
+            if restriction_node.attrib.get(MINAGE):
+                self.minage = int(restriction_node.attrib.get(MINAGE))
+            if restriction_node.attrib.get(MAXAGE):
+                self.maxage = int(restriction_node.attrib.get(MAXAGE))
         if self.type == RestrictionType.LOCATION:
             self.inside = restriction_node.attrib.get(INSIDE)
             self.outside = restriction_node.attrib.get(OUTSIDE)
@@ -320,7 +362,10 @@ class Restriction:
             if restriction_node.attrib.get(TODATE):
                 self.todate = date.fromisoformat(restriction_node.attrib.get(TODATE))
         if self.type == RestrictionType.DURATION:
-            self.duration = int(restriction_node.attrib.get(DURATION))
+            if restriction_node.attrib.get(DURATION):
+                self.duration = int(restriction_node.attrib.get(DURATION))
+            if restriction_node.attrib.get(MAXDURATION):
+                self.maxduration = int(restriction_node.attrib.get(MAXDURATION))
         if self.type == RestrictionType.COUNT:
             self.count = int(restriction_node.attrib.get(COUNT))
         if self.type == RestrictionType.CONCURRENT:
@@ -328,25 +373,32 @@ class Restriction:
         if self.type == RestrictionType.WATERMARK:
             self.watermarkvalue = restriction_node.attrib.get(WATERMARK)
         if self.type == RestrictionType.COMMERCIALUSE:
-            self.commercialuse = restriction_node.attrib.get(COMMERCIAL) == 'true'
-            self.noncommercialuse = restriction_node.attrib.get(NONCOMMERCIAL) == 'true'
+            if restriction_node.attrib.get(COMMERCIAL):
+                self.commercialuse = restriction_node.attrib.get(COMMERCIAL) == 'true'
+            if restriction_node.attrib.get(NONCOMMERCIAL):
+                self.noncommercialuse = restriction_node.attrib.get(NONCOMMERCIAL) == 'true'
         if self.type == RestrictionType.QUALITY:
-            self.maxbitrate = restriction_node.attrib.get(MAXBIT)
-            self.maxresolution = restriction_node.attrib.get(MAXRES)
+            if restriction_node.attrib.get(MAXBIT):
+                self.maxbitrate = int(restriction_node.attrib.get(MAXBIT))
+            if restriction_node.attrib.get(MAXRES):
+                self.maxresolution = int(restriction_node.attrib.get(MAXRES))
+            if restriction_node.attrib.get(MAXDIMENSION):
+                self.maxdimension = int(restriction_node.attrib.get(MAXDIMENSION))
         if self.type == RestrictionType.AGREEMENT:
-            self.agreement_required = restriction_node.attrib.get(AGREEMENTREQ) == 'true'
+            if restriction_node.attrib.get(REQUIRED):
+                self.required = restriction_node.attrib.get(REQUIRED) == 'true'
 
 
 class Action:
-    def __init__(self, actiontype: ActionType, permission: bool = None, restrictions: List[Restriction] = None):
+    def __init__(self, type: ActionType, permission: bool | None = None, restrictions: list[Restriction] | None = None):
         self.permission = permission
         if restrictions is not None:
             self.restrictions = restrictions
         else:
             self.restrictions = TypedList(Restriction)
 
-        if actiontype in ActionType:
-            self.type = actiontype
+        if type in ActionType:
+            self.type = type
         else:
             raise TypeError
 
@@ -390,7 +442,7 @@ class Action:
         d = json.loads(actionjson)
         t = ActionType.fname(d[TYPE])
         p = d[PERMISSION]
-        action = Action(actiontype=t, permission=p)
+        action = Action(type=t, permission=p)
         action.from_dict(d)
         return action
 
@@ -410,33 +462,23 @@ class Action:
         x = ET.fromstring(actionxml)
         t = ActionType.fname(x.attrib.get(TYPE))
         p = x.attrib.get(PERMISSION) == 'true'
-        action = Action(actiontype=t, permission=p)
+        action = Action(type=t, permission=p)
         action.from_xml(x)
         return action
 
 
 class LibRML(object):
-    def __init__(self,
-                 itemid: str,
-                 relatedids: List[str] = None,
-                 tenant: str = None,
-                 mention: bool = False,
-                 sharealike: bool = False,
-                 usageguide: str = None,
-                 template: str = None,
-                 copyright: bool = False,
-                 actions: List[Action] = None):
+    def __init__(self, itemid: str, tenant: str | None = None, mention: bool = False, sharealike: bool = False,
+                 usageguide: str | None = None, template: str | None = None, copyright: bool = False,
+                 commercialuse: bool | None = None, actions: list[Action] | None = None):
         self.id = itemid
-        if relatedids is not None:
-            self.relatedids = relatedids
-        else:
-            self.relatedids = []
         self.tenant = tenant
         self.mention = mention
         self.sharealike = sharealike
         self.usageguide = usageguide
         self.template = template
         self.copyright = copyright
+        self.commercialuse = commercialuse
         if actions is not None:
             self.actions = actions
         else:
@@ -444,8 +486,6 @@ class LibRML(object):
 
     def to_dict(self):
         output = {ID: self.id}
-        if len(self.relatedids) > 0:
-            output[RELATEDIDS] = self.relatedids
         if self.tenant:
             output[TENANT] = self.tenant
         if self.mention:
@@ -458,6 +498,9 @@ class LibRML(object):
             output[TEMPLATE] = self.template
         if self.copyright:
             output[COPYRIGHT] = self.copyright
+        if self.commercialuse is not None:
+            output[COMMERCIAL] = self.commercialuse
+
         if len(self.actions) > 0:
             astring = []
             for action in self.actions:
@@ -471,9 +514,6 @@ class LibRML(object):
         root.append(ET.Comment(' This XML is created using the libRML Python code '))
         item = ET.SubElement(root, ITEM, {ID: self.id})
 
-        if len(self.relatedids) > 0:
-            for rid in self.relatedids:
-                ET.SubElement(item, RELATEDID, {ID: rid})
         if self.tenant:
             item.set(TENANT, str(self.tenant))
         if self.mention:
@@ -486,6 +526,9 @@ class LibRML(object):
             item.set(TEMPLATE, str(self.template))
         if self.copyright:
             item.set(COPYRIGHT, str(self.copyright).lower())
+        if self.commercialuse is not None:
+            item.set(COMMERCIAL, str(self.commercialuse).lower())
+
         if len(self.actions) > 0:
             for action in self.actions:
                 item.append(action.to_xml())
@@ -509,8 +552,6 @@ class LibRML(object):
             self.id = data[ID]
         else:
             raise LibRMLNotValidError('JSON has no attribute {}!'.format(ID))
-        if RELATEDIDS in data:
-            self.relatedids = data[RELATEDIDS]
         if TENANT in data:
             self.tenant = data[TENANT]
         if MENTION in data:
@@ -523,10 +564,12 @@ class LibRML(object):
             self.template = data[TEMPLATE]
         if COPYRIGHT in data:
             self.copyright = data[COPYRIGHT]
+        if COMMERCIAL in data:
+            self.commercialuse = data[COMMERCIAL]
         if ACTIONS in data:
             actions = data[ACTIONS]
             for action in actions:
-                a = Action(ActionType.fname(action[TYPE]))
+                a = Action(type=ActionType.fname(action[TYPE]))
                 self.actions.append(a)
                 a.from_dict(action)
 
@@ -536,11 +579,8 @@ class LibRML(object):
         root = xml_tree.getroot()
         if root.tag == LIBRML:
             ie = root.find(ITEM)
-            if ie is not None and ID in ie.attrib and TENANT in ie.attrib:
-                librml = LibRML(itemid=ie.attrib.get(ID))
-                for rid_node in ie.iter(RELATEDID):
-                    if ID in rid_node.attrib:
-                        librml.relatedids.append(rid_node.attrib.get(ID))
+            if ie is not None and (ID in ie.attrib or TENANT in ie.attrib):
+                librml = LibRML(itemid=ie.attrib.get(ID, ''))
                 librml.tenant = ie.attrib.get(TENANT)
                 if MENTION in ie.attrib:
                     librml.mention = ie.attrib.get(MENTION) == 'true'
@@ -552,17 +592,19 @@ class LibRML(object):
                     librml.template = ie.attrib.get(TEMPLATE)
                 if COPYRIGHT in ie.attrib:
                     librml.copyright = ie.attrib.get(COPYRIGHT) == 'true'
+                if COMMERCIAL in ie.attrib:
+                    librml.commercialuse = ie.attrib.get(COMMERCIAL) == 'true'
                 for action_node in ie.iter(XACTION):
                     if TYPE in action_node.attrib:
-                        action = Action(actiontype=ActionType.fname(action_node.attrib.get(TYPE)))
+                        action = Action(type=ActionType.fname(action_node.attrib.get(TYPE)))
                         action.from_xml(action_node)
                         librml.actions.append(action)
                     else:
                         raise LibRMLNotValidError('Action inside Item has no attribute "{}".'.format(TYPE))
             else:
                 raise LibRMLNotValidError(
-                    'Can\'t find element "{item}", or the {item} has no "{id}", or the {item} has no "{tenant}".'
-                        .format(item=ITEM, id=ID, tenant=TENANT))
+                    'Can\'t find element "{}", or the {} has no "{}" or "{}".'
+                        .format(ITEM, ITEM, ID, TENANT))
         else:
             raise LibRMLNotValidError('There is no root element named "{}". Go away!'.format(LIBRML))
         return librml
