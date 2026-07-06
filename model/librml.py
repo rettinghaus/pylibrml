@@ -47,9 +47,12 @@ from model.names import (
     COPYRIGHT,
     RELATEDIDS,
     RELATEDID,
+    NAMESPACE,
 )
 
 logger = logging.getLogger(__name__)
+
+ET.register_namespace("", NAMESPACE)
 
 
 class TypedList(collections.abc.MutableSequence):
@@ -271,17 +274,17 @@ class Restriction:
                 }
 
     def to_xml(self):
-        x = ET.Element(XRESTRICTION, {TYPE: self.type.name.lower()})
+        x = ET.Element(f"{{{NAMESPACE}}}{XRESTRICTION}", {TYPE: self.type.name.lower()})
 
         if self.type == RestrictionType.PARTS:
             if self.percentage:
                 x.set(PERCENTAGE, str(self.percentage))
             for part in self.parts:
-                p = ET.SubElement(x, XPART)
+                p = ET.SubElement(x, f"{{{NAMESPACE}}}{XPART}")
                 p.text = part
         elif self.type == RestrictionType.GROUP:
             for group in self.groups:
-                g = ET.SubElement(x, XGROUP)
+                g = ET.SubElement(x, f"{{{NAMESPACE}}}{XGROUP}")
                 g.text = group
         elif self.type == RestrictionType.AGE:
             if self.minage:
@@ -294,7 +297,7 @@ class Restriction:
             if self.outside:
                 x.set(OUTSIDE, self.outside)
             for n in self.subnet:
-                xn = ET.SubElement(x, XSUBNET)
+                xn = ET.SubElement(x, f"{{{NAMESPACE}}}{XSUBNET}")
                 xn.text = str(n)
         elif self.type == RestrictionType.DATE:
             if self.todate:
@@ -377,10 +380,10 @@ class Restriction:
         if self.type == RestrictionType.PARTS:
             if restriction_node.attrib.get(PERCENTAGE):
                 self.percentage = int(restriction_node.attrib.get(PERCENTAGE))
-            for part in restriction_node.iterfind(XPART):
+            for part in restriction_node.iterfind(f"{{*}}{XPART}"):
                 self.parts.append(part.text)
         if self.type == RestrictionType.GROUP:
-            for group in restriction_node.iterfind(XGROUP):
+            for group in restriction_node.iterfind(f"{{*}}{XGROUP}"):
                 self.groups.append(group.text)
         if self.type == RestrictionType.AGE:
             if restriction_node.attrib.get(MINAGE):
@@ -390,7 +393,7 @@ class Restriction:
         if self.type == RestrictionType.LOCATION:
             self.inside = restriction_node.attrib.get(INSIDE)
             self.outside = restriction_node.attrib.get(OUTSIDE)
-            for subnet in restriction_node.iterfind(XSUBNET):
+            for subnet in restriction_node.iterfind(f"{{*}}{XSUBNET}"):
                 self.subnet.append(subnet.text)
         if self.type == RestrictionType.DATE:
             if restriction_node.attrib.get(FROMDATE):
@@ -461,7 +464,7 @@ class Action:
         return output
 
     def to_xml(self):
-        a = ET.Element(XACTION, {TYPE: self.type.name.lower()})
+        a = ET.Element(f"{{{NAMESPACE}}}{XACTION}", {TYPE: self.type.name.lower()})
         if self.permission:
             a.set(PERMISSION, str(self.permission).lower())
 
@@ -492,7 +495,7 @@ class Action:
     def from_xml(self, action_node):
         if PERMISSION in action_node.attrib:
             self.permission = action_node.attrib.get(PERMISSION) == "true"
-        for restriction_node in action_node.iterfind(XRESTRICTION):
+        for restriction_node in action_node.iterfind(f"{{*}}{XRESTRICTION}"):
             if TYPE in restriction_node.attrib:
                 r = Restriction(
                     RestrictionType.fname(restriction_node.attrib.get(TYPE))
@@ -573,16 +576,16 @@ class LibRML(object):
         return output
 
     def to_xml(self):
-        root = ET.Element(LIBRML)
+        root = ET.Element(f"{{{NAMESPACE}}}{LIBRML}")
         root.set("version", VERSION)
         root.append(ET.Comment(" This XML was created using the libRML Python code "))
-        item = ET.SubElement(root, ITEM)
+        item = ET.SubElement(root, f"{{{NAMESPACE}}}{ITEM}")
 
         if self.id:
             item.set(ID, str(self.id))
         if len(self.relatedids) > 0:
             for rid in self.relatedids:
-                ET.SubElement(item, RELATEDID, {ID: rid})
+                ET.SubElement(item, f"{{{NAMESPACE}}}{RELATEDID}", {ID: rid})
         if self.tenant:
             item.set(TENANT, str(self.tenant))
         if self.usageguide:
@@ -647,8 +650,8 @@ class LibRML(object):
     def from_xmlstr(xmlstr: str):
         xml_tree = ET.ElementTree(ET.fromstring(xmlstr))
         root = xml_tree.getroot()
-        if root.tag == LIBRML:
-            ie = root.find(ITEM)
+        if root.tag in [LIBRML, f"{{{NAMESPACE}}}{LIBRML}"]:
+            ie = root.find(f"{{*}}{ITEM}")
             if ie is not None and (ID in ie.attrib or TENANT in ie.attrib):
                 librml = LibRML(itemid=ie.attrib.get(ID, ""))
                 librml.tenant = ie.attrib.get(TENANT)
@@ -664,7 +667,10 @@ class LibRML(object):
                     librml.copyright = ie.attrib.get(COPYRIGHT) == "true"
                 if COMMERCIAL in ie.attrib:
                     librml.commercialuse = ie.attrib.get(COMMERCIAL) == "true"
-                for action_node in ie.iter(XACTION):
+                for rid_node in ie.iterfind(f"{{*}}{RELATEDID}"):
+                    if ID in rid_node.attrib:
+                        librml.relatedids.append(rid_node.attrib.get(ID))
+                for action_node in ie.iterfind(f"{{*}}{XACTION}"):
                     if TYPE in action_node.attrib:
                         action = Action(
                             actiontype=ActionType.fname(action_node.attrib.get(TYPE))

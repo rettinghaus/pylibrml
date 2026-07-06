@@ -44,3 +44,5 @@ MAXRES = "maxresolution"
 MAXBIT = "maxbitrate"
 MAXDIMENSION = "maxdimension"
 AGREEMENTREQ = "required"
+
+NAMESPACE = "http://librml.org/schema"
