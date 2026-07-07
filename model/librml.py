@@ -1,8 +1,9 @@
 import collections.abc
 import json
 import logging
-import xml.etree.ElementTree as ET
 from datetime import date
+
+from lxml import etree as ET
 from enum import Enum, unique
 
 from common.errors import LibRMLNotValidError
@@ -51,8 +52,6 @@ from model.names import (
 )
 
 logger = logging.getLogger(__name__)
-
-ET.register_namespace("", NAMESPACE)
 
 
 class TypedList(collections.abc.MutableSequence):
@@ -380,10 +379,10 @@ class Restriction:
         if self.type == RestrictionType.PARTS:
             if restriction_node.attrib.get(PERCENTAGE):
                 self.percentage = int(restriction_node.attrib.get(PERCENTAGE))
-            for part in restriction_node.iterfind(f"{{*}}{XPART}"):
+            for part in restriction_node.xpath(f"./*[local-name() = '{XPART}']"):
                 self.parts.append(part.text)
         if self.type == RestrictionType.GROUP:
-            for group in restriction_node.iterfind(f"{{*}}{XGROUP}"):
+            for group in restriction_node.xpath(f"./*[local-name() = '{XGROUP}']"):
                 self.groups.append(group.text)
         if self.type == RestrictionType.AGE:
             if restriction_node.attrib.get(MINAGE):
@@ -393,7 +392,7 @@ class Restriction:
         if self.type == RestrictionType.LOCATION:
             self.inside = restriction_node.attrib.get(INSIDE)
             self.outside = restriction_node.attrib.get(OUTSIDE)
-            for subnet in restriction_node.iterfind(f"{{*}}{XSUBNET}"):
+            for subnet in restriction_node.xpath(f"./*[local-name() = '{XSUBNET}']"):
                 self.subnet.append(subnet.text)
         if self.type == RestrictionType.DATE:
             if restriction_node.attrib.get(FROMDATE):
@@ -495,7 +494,9 @@ class Action:
     def from_xml(self, action_node):
         if PERMISSION in action_node.attrib:
             self.permission = action_node.attrib.get(PERMISSION) == "true"
-        for restriction_node in action_node.iterfind(f"{{*}}{XRESTRICTION}"):
+        for restriction_node in action_node.xpath(
+            f"./*[local-name() = '{XRESTRICTION}']"
+        ):
             if TYPE in restriction_node.attrib:
                 r = Restriction(
                     RestrictionType.fname(restriction_node.attrib.get(TYPE))
@@ -576,8 +577,9 @@ class LibRML(object):
         return output
 
     def to_xml(self):
-        root = ET.Element(f"{{{NAMESPACE}}}{LIBRML}")
-        root.set("version", VERSION)
+        root = ET.Element(
+            f"{{{NAMESPACE}}}{LIBRML}", nsmap={None: NAMESPACE}, version=VERSION
+        )
         root.append(ET.Comment(" This XML was created using the libRML Python code "))
         item = ET.SubElement(root, f"{{{NAMESPACE}}}{ITEM}")
 
@@ -604,7 +606,13 @@ class LibRML(object):
             for action in self.actions:
                 item.append(action.to_xml())
 
-        return ET.tostring(root, encoding="unicode", method="xml", xml_declaration=True)
+        return ET.tostring(
+            root,
+            encoding="utf-8",
+            method="xml",
+            xml_declaration=True,
+            pretty_print=True,
+        ).decode("utf-8")
 
     def from_json(self, json_obj):
         data = json.loads(json_obj)
@@ -648,11 +656,13 @@ class LibRML(object):
 
     @staticmethod
     def from_xmlstr(xmlstr: str):
-        xml_tree = ET.ElementTree(ET.fromstring(xmlstr))
-        root = xml_tree.getroot()
+        root = ET.fromstring(xmlstr.encode("utf-8"))
         if root.tag in [LIBRML, f"{{{NAMESPACE}}}{LIBRML}"]:
-            ie = root.find(f"{{*}}{ITEM}")
-            if ie is not None and (ID in ie.attrib or TENANT in ie.attrib):
+            items = root.xpath(f"./*[local-name() = '{ITEM}']")
+            if not items:
+                raise LibRMLNotValidError(f"Can't find element '{ITEM}'")
+            ie = items[0]
+            if ID in ie.attrib or TENANT in ie.attrib:
                 librml = LibRML(itemid=ie.attrib.get(ID, ""))
                 librml.tenant = ie.attrib.get(TENANT)
                 if MENTION in ie.attrib:
@@ -667,10 +677,10 @@ class LibRML(object):
                     librml.copyright = ie.attrib.get(COPYRIGHT) == "true"
                 if COMMERCIAL in ie.attrib:
                     librml.commercialuse = ie.attrib.get(COMMERCIAL) == "true"
-                for rid_node in ie.iterfind(f"{{*}}{RELATEDID}"):
+                for rid_node in ie.xpath(f"./*[local-name() = '{RELATEDID}']"):
                     if ID in rid_node.attrib:
                         librml.relatedids.append(rid_node.attrib.get(ID))
-                for action_node in ie.iterfind(f"{{*}}{XACTION}"):
+                for action_node in ie.xpath(f"./*[local-name() = '{XACTION}']"):
                     if TYPE in action_node.attrib:
                         action = Action(
                             actiontype=ActionType.fname(action_node.attrib.get(TYPE))
