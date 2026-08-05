@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@0b93645e9fae42406d96e472dec452a26c48d251 # v5.3.0
+      uses: actions/setup-python@f67530468f3c8340d27035f6190db4704f5e7c40 # v5.0.0
       with:
         python-version: ${{ matrix.python-version }}
 
